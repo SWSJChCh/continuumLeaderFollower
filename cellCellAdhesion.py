@@ -6,7 +6,7 @@ import time
 ############################## Helper functions ################################
 
 # Compute CFL condition (with additional safety factor)
-def cfl_dt(h, v_l, d_f, safety=0.01):
+def cfl_dt(h, d_f, safety=0.01):
     lims = []
     if d_f > 0: lims.append(h*h/(2.0*d_f))
     if not lims:
@@ -98,7 +98,7 @@ class ExplicitNeuralCrest1D:
         self._shift_accum = 0.0
 
         # Timestep
-        self.dt = cfl_dt(self.h, 0.0, self.d_f, 0.0, safety) \
+        self.dt = cfl_dt(self.h, self.d_f, safety) \
                   if dt is None else float(dt)
 
     def default_initial_condition(self):
