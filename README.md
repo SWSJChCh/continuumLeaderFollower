@@ -30,7 +30,9 @@ scipy.signal.
 
 The required libraries can be installed using pip:
 
-pip install numpy scipy
+```bash
+pip install numpy==2.2.4 scipy==1.15.2
+```
 
 ### Code Structure
 
