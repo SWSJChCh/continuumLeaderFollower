@@ -15,21 +15,15 @@ constraint.
 The implementation is designed to reproduce the simulations and parameter sweeps
 presented in Chapter 6 of the thesis.
 
----
-
 ### Code Author
-Samuel Johnson
+- Samuel Johnson
 
 ### Date
-09/01/2026
+- 09/01/2026
 
----
-
-## Requirements
-The code requires the following Python libraries:
-
-numpy  
-scipy  
+### Requirements
+- numpy==2.2.4
+- scipy==1.15.2
 
 In particular, the implementation relies on FFT-based convolution from
 scipy.signal.
@@ -40,7 +34,7 @@ pip install numpy scipy
 
 ---
 
-## Code Structure
+### Code Structure
 
 cellCellAdhesion.py
 
@@ -55,9 +49,7 @@ The code includes:
 - non-local attraction terms evaluated using FFT-based linear convolution
 - zero-flux boundary conditions for follower diffusion and taxis
 
----
-
-## Model Description
+### Model Description
 
 Leaders:
 - advect at constant speed v0
@@ -72,35 +64,21 @@ Non-local interactions:
 - truncated Gaussian kernels with interaction lengths xi_ff and xi_fl
 - linear convolution with zero extension beyond the computational domain
 
----
+### Execution
 
-## Execution
+The code is executed from the command line, with parameters given as command line arguments:
 
-The code is executed from the command line, passing interaction parameters as arguments:
-
+```bash
 python cellCellAdhesion.py mu_fl mu_ff xi_fl xi_ff
+```
 
-Command-line arguments:
+- **mu_fl** - Follower–leader interaction strength (integer)
+- **mu_ff** - Follower–follower interaction strength (integer)
+- **xi_fl** - Follower–leader interaction length in microns (integer)
+- **xi_ff** - Follower–follower interaction length in microns (integer)
 
-mu_fl  
-Follower–leader interaction strength (integer)
 
-mu_ff  
-Follower–follower interaction strength (integer)
-
-xi_fl  
-Follower–leader interaction length in microns (integer)
-
-xi_ff  
-Follower–follower interaction length in microns (integer)
-
-Example:
-
-python cellCellAdhesion.py 50 50 50 50
-
----
-
-## Output
+### Outputs
 
 The simulation produces two text files:
 
