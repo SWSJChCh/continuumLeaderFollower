@@ -32,8 +32,6 @@ The required libraries can be installed using pip:
 
 pip install numpy scipy
 
----
-
 ### Code Structure
 
 cellCellAdhesion.py
