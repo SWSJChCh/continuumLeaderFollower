@@ -1,49 +1,61 @@
 import sys
+import time
 import numpy as np
 from scipy.signal import fftconvolve
-import time
 
-############################## Helper functions ################################
+'''
+Helper functions
+'''
 
-# Compute CFL condition (with additional safety factor)
-def cfl_dt(h, d_f, safety=0.01):
+def cflDt(h, dF, safety=0.01):
+    # CFL timestep restriction
     lims = []
-    if d_f > 0: lims.append(h*h/(2.0*d_f))
-    if not lims:
+
+    if dF > 0:
+        lims.append(h * h / (2.0 * dF))
+
+    if len(lims) == 0:
         return 1.0
+
     return safety * min(lims)
 
-# Compute laplacian
-def laplacian_neumann(Z, h):
+
+def laplacianNeumann(Z, h):
     lap = np.zeros_like(Z)
-    lap[1:-1] = (Z[:-2] + Z[2:] - 2.0*Z[1:-1]) / (h*h)
-    lap[0]    = 2 * (Z[1]  - Z[0]) / (h*h)
-    lap[-1]   = 2 * (Z[-2] - Z[-1]) / (h*h)
+
+    lap[1:-1] = (Z[:-2] + Z[2:] - 2.0 * Z[1:-1]) / (h * h)
+    lap[0]    = 2.0 * (Z[1]  - Z[0])  / (h * h)
+    lap[-1]   = 2.0 * (Z[-2] - Z[-1]) / (h * h)
+
     return lap
 
-# Build exponential interaction kernel
-def exp_kernel(L, h, interaction_length):
-    three_sigma = 3 * interaction_length
-    box_cap = max(0.0, L/2.0 - h)
-    radius = min(three_sigma, box_cap)
 
-    npts = max(1, int(np.floor(radius / h)))
-    x = np.arange(-npts, npts + 1) * h
+def expKernel(L, h, interactionLength):
+    threeSigma = 3.0 * interactionLength
+    boxCap = max(0.0, L / 2.0 - h)
+    radius = min(threeSigma, boxCap)
 
-    ker = np.exp(-0.5 * (np.abs(x) / interaction_length)**2)
-    # Normalisation so that sum * h ≈ ξ
-    ker *= interaction_length / (np.sum(ker) * h)
+    nPts = max(1, int(np.floor(radius / h)))
+    x = np.arange(-nPts, nPts + 1) * h
+
+    ker = np.exp(-0.5 * (np.abs(x) / interactionLength) ** 2)
+
+    # Normalise so that sum * h ≈ interaction length
+    ker *= interactionLength / (np.sum(ker) * h)
+
     return ker
 
-# Compute non-local convolution using FFT
-def nonlocal_convolution(Z, kernel, h):
+
+def nonlocalConvolution(Z, kernel, h):
     return h * fftconvolve(Z, kernel, mode='same')
 
-# Leader cell shifting function (advection)
-def shift_vacuum(arr, n):
+
+def shiftVacuum(arr, n):
     if n == 0:
         return arr.copy()
+
     out = np.zeros_like(arr)
+
     if n > 0:
         if n < arr.size:
             out[n:] = arr[:-n]
@@ -51,182 +63,233 @@ def shift_vacuum(arr, n):
         n = -n
         if n < arr.size:
             out[:-n] = arr[n:]
+
     return out
 
-#################################### Model #####################################
 
-class ExplicitNeuralCrest1D:
-    """
-    Forward-Euler integrator.
-    Leaders: pure translation by integer-cell rolling.
-      - boundary_mode='vacuum' (no wrap).
-      - boundary_mode='wrap' uses periodic wrap via np.roll.
-    Followers: diffusion + nonlocal-taxis with volume filling.
-    """
+'''
+Model class
+'''
+
+class explicitNeuralCrest1D:
+    '''
+    Explicit Forward–Euler solver.
+
+    Leaders:
+        Pure translation via integer grid-cell shifts.
+
+    Followers:
+        Diffusion + nonlocal taxis with volume filling.
+    '''
+
     def __init__(
-        self, l0, f0, v_l, d_f, mu_fl, mu_ff, K,
-        xi_fl, xi_ff, L, mesh_points,
-        time_span, time_evaluations,
-        dt=None, safety=0.01, clip_nonneg=True,
-        boundary_mode='vacuum'
+        self,
+        l0, f0,
+        vL, dF,
+        muFL, muFF,
+        K,
+        xiFL, xiFF,
+        L, meshPoints,
+        timeSpan, timeEvaluations,
+        dt=None,
+        safety=0.01,
+        clipNonneg=True,
+        boundaryMode='vacuum'
     ):
-        self.l0, self.f0 = l0, f0
-        self.v_l = float(v_l)
-        self.d_f = float(d_f)
-   
-        self.mu_fl, self.mu_ff = float(mu_fl), float(mu_ff)
+        self.l0 = l0
+        self.f0 = f0
+
+        self.vL = float(vL)
+        self.dF = float(dF)
+
+        self.muFL = float(muFL)
+        self.muFF = float(muFF)
+
         self.K = float(K)
-        self.xi_fl, self.xi_ff = float(xi_fl), float(xi_ff)
+
+        self.xiFL = float(xiFL)
+        self.xiFF = float(xiFF)
 
         self.L = float(L)
-        self.N = int(mesh_points)
+        self.N = int(meshPoints)
+
         self.x = np.linspace(0.0, self.L, self.N)
-        self.h = self.x[1] - self.x[0] if self.N > 1 else self.L
 
-        self.t0, self.tf = time_span
-        self.t_eval = np.asarray(time_evaluations, dtype=float)
+        if self.N > 1:
+            self.h = self.x[1] - self.x[0]
+        else:
+            self.h = self.L
 
-        self.kernel_fl = exp_kernel(self.L, self.h, self.xi_fl)
-        self.kernel_ff = exp_kernel(self.L, self.h, self.xi_ff)
+        self.t0, self.tf = timeSpan
+        self.tEval = np.asarray(timeEvaluations, dtype=float)
 
-        self.l, self.f = self.default_initial_condition()
+        self.kernelFL = expKernel(self.L, self.h, self.xiFL)
+        self.kernelFF = expKernel(self.L, self.h, self.xiFF)
 
-        self.clip_nonneg = clip_nonneg
-        self.boundary_mode = boundary_mode 
+        self.l, self.f = self.defaultInitialCondition()
 
-        # Displacement accumulator in grid-cell units
-        self._shift_accum = 0.0
+        self.clipNonneg = clipNonneg
+        self.boundaryMode = boundaryMode
 
-        # Timestep
-        self.dt = cfl_dt(self.h, self.d_f, safety) \
-                  if dt is None else float(dt)
+        # Accumulated leader displacement (grid-cell units)
+        self.shiftAccum = 0.0
 
-    def default_initial_condition(self):
+        if dt is None:
+            self.dt = cflDt(self.h, self.dF, safety)
+        else:
+            self.dt = float(dt)
+
+
+    def defaultInitialCondition(self):
         x = self.x
+
         l = np.zeros_like(x)
         f = np.zeros_like(x)
-        x_lower = 65.0
-        x_upper = 870.0
-        delta = 5.0
-        f[:] = 0.5 * self.f0 * (np.tanh((x - x_lower)/delta) - \
-               np.tanh((x - x_upper)/delta))
+
+        xLower = 65.0
+        xUpper = 870.0
+        delta  = 5.0
+
+        f[:] = 0.5 * self.f0 * (
+            np.tanh((x - xLower) / delta)
+            - np.tanh((x - xUpper) / delta)
+        )
+
         x0 = 895.0
         sigma = 12.0
-        base = np.exp(-0.5*((x - x0)/sigma)**2)
+
+        base = np.exp(-0.5 * ((x - x0) / sigma) ** 2)
         l[:] = (base / base.max()) * f.max()
+
         return l, f
 
-    def _shift_leaders(self):
-        if self.v_l == 0.0:
+
+    def shiftLeaders(self):
+        if self.vL == 0.0:
             return
-        # Accumulate displacement in cell units
-        self._shift_accum += self.v_l * self.dt / self.h
-        nshift = int(np.trunc(self._shift_accum))  
-        if nshift != 0:
-            if self.boundary_mode == 'wrap':
-                self.l = np.roll(self.l, nshift)
+
+        self.shiftAccum += self.vL * self.dt / self.h
+        nShift = int(np.trunc(self.shiftAccum))
+
+        if nShift != 0:
+            if self.boundaryMode == 'wrap':
+                self.l = np.roll(self.l, nShift)
             else:
-                self.l = shift_vacuum(self.l, nshift)
-            self._shift_accum -= nshift  
+                self.l = shiftVacuum(self.l, nShift)
+
+            self.shiftAccum -= nShift
+
 
     def step(self):
-        # Leader shift
-        self._shift_leaders()
+        # Leader update
+        self.shiftLeaders()
 
-        # Follower PDE update
-        l, f = self.l, self.f
+        l = self.l
+        f = self.f
 
-        C = (self.mu_ff * nonlocal_convolution(f, self.kernel_ff, self.h)
-            + self.mu_fl * nonlocal_convolution(l, self.kernel_fl, self.h))
+        C = (
+            self.muFF * nonlocalConvolution(f, self.kernelFF, self.h)
+            + self.muFL * nonlocalConvolution(l, self.kernelFL, self.h)
+        )
 
-        lap_f = laplacian_neumann(f, self.h)
+        lapF = laplacianNeumann(f, self.h)
 
-        # Finite volume taxis
-        P = self.K - l - f                         
-        dCdx_face = (C[1:] - C[:-1]) / self.h       
-        P_face = 0.5 * (P[1:] + P[:-1])            
-        u_face = P_face * dCdx_face                
+        # Finite-volume taxis
+        P = self.K - l - f
 
-        f_up = np.where(u_face >= 0.0, f[:-1], f[1:])  
+        dCdxFace = (C[1:] - C[:-1]) / self.h
+        PFace = 0.5 * (P[1:] + P[:-1])
+        uFace = PFace * dCdxFace
 
-        F_face = np.zeros(self.N + 1)               
-        F_face[1:-1] = f_up * u_face
+        fUp = np.where(uFace >= 0.0, f[:-1], f[1:])
 
-        dflux_dx = (F_face[1:] - F_face[:-1]) / self.h    
+        FFace = np.zeros(self.N + 1)
+        FFace[1:-1] = fUp * uFace
 
-        df_dt = self.d_f * lap_f - dflux_dx
+        dFluxDx = (FFace[1:] - FFace[:-1]) / self.h
         
-        self.f = f + self.dt * df_dt     
+        print(dFluxDx)
 
-        if self.clip_nonneg:
+        dfDt = self.dF * lapF - dFluxDx
+
+        self.f = f + self.dt * dfDt
+
+        if self.clipNonneg:
             np.maximum(self.f, 0.0, out=self.f)
 
-    def simulate_with_progress(self, y_file, t_file, checks=50):
-        start = time.time()
-        t_grid = self.t_eval
-        out_Y = np.empty((2*self.N, t_grid.size), dtype=float)
 
-        t_curr = self.t0
-        out_Y[:self.N, 0] = self.l
-        out_Y[self.N:, 0] = self.f
+    def simulateWithProgress(self, yFile, tFile):
+        tGrid = self.tEval
+        outY = np.empty((2 * self.N, tGrid.size), dtype=float)
 
-        total = t_grid[-1] - t_grid[0]
-        next_check = 1
+        tCurr = self.t0
 
-        for k in range(1, t_grid.size):
-            t_target = t_grid[k]
-            while t_curr + self.dt < t_target - 1e-15:
+        outY[:self.N, 0] = self.l
+        outY[self.N:, 0] = self.f
+
+        for k in range(1, tGrid.size):
+            tTarget = tGrid[k]
+
+            while tCurr + self.dt < tTarget - 1e-15:
                 self.step()
-                t_curr += self.dt
-                print(t_curr)
+                tCurr += self.dt
 
-            dt_last = t_target - t_curr
-            if dt_last > 1e-15:
-                dt_save = self.dt
-                self.dt = dt_last
+            dtLast = tTarget - tCurr
+
+            if dtLast > 1e-15:
+                dtSave = self.dt
+                self.dt = dtLast
                 self.step()
-                self.dt = dt_save
-                t_curr = t_target
+                self.dt = dtSave
+                tCurr = tTarget
 
-            out_Y[:self.N, k] = self.l
-            out_Y[self.N:, k] = self.f
+            outY[:self.N, k] = self.l
+            outY[self.N:, k] = self.f
 
-            frac = (t_grid[k] - t_grid[0]) / total if total > 0 else 1.0
-            if frac >= next_check / checks:
-                next_check += 1
+        np.savetxt(yFile, outY, delimiter=',')
+        np.savetxt(tFile, tGrid, delimiter=',')
 
-        np.savetxt(y_file, out_Y, delimiter=',')
-        np.savetxt(t_file, t_grid, delimiter=',')
 
-############################## CLI wrapper #####################################
+'''
+CLI wrapper
+'''
 
 if __name__ == "__main__":
+
     l0 = 0.95
     f0 = 0.95
-    v_l = 1.0
-    d_f = 10.0
-    mu_fl = int(sys.argv[1])
-    mu_ff = int(sys.argv[2])
-    xi_fl = int(sys.argv[3])
-    xi_ff = int(sys.argv[4])
+
+    vL = 1.0
+    dF = 10.0
+
+    muFL = int(sys.argv[1])
+    muFF = int(sys.argv[2])
+
+    xiFL = int(sys.argv[3])
+    xiFF = int(sys.argv[4])
+
     K = 1.0
     L = 2000.0
-    mesh_points = 20000
-    time_span = (0.0, 12.0 * 60.0)
-    time_evaluations = np.linspace(time_span[0], time_span[1], 24)
+    meshPoints = 20000
 
-    sim = ExplicitNeuralCrest1D(
-        l0, f0, v_l, d_f, mu_fl, mu_ff, K,
-        xi_fl, xi_ff, L, mesh_points,
-        time_span, time_evaluations,
-        dt=None,          
+    timeSpan = (0.0, 12 * 60.0)
+    timeEvaluations = np.linspace(timeSpan[0], timeSpan[1], 24)
+
+    sim = explicitNeuralCrest1D(
+        l0, f0,
+        vL, dF,
+        muFL, muFF,
+        K,
+        xiFL, xiFF,
+        L, meshPoints,
+        timeSpan, timeEvaluations,
+        dt=None,
         safety=0.01,
-        clip_nonneg=True,
-        boundary_mode='vacuum'  
+        clipNonneg=True,
+        boundaryMode='vacuum'
     )
 
-    filename_y = f"Y_mu_fl{mu_fl}_mu_ff{mu_ff}_xi_fl{xi_fl}_xi_ff{xi_ff}.txt"
-    filename_t = f"T_mu_fl{mu_fl}_mu_ff{mu_ff}_xi_fl{xi_fl}_xi_ff{xi_ff}.txt"
+    yFile = f"Y_mu_fl{muFL}_mu_ff{muFF}_xi_fl{xiFL}_xi_ff{xiFF}.txt"
+    tFile = f"T_mu_fl{muFL}_mu_ff{muFF}_xi_fl{xiFL}_xi_ff{xiFF}.txt"
 
-    sim.simulate_with_progress(filename_y, filename_t)
-
+    sim.simulateWithProgress(yFile, tFile)
