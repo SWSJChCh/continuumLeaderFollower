@@ -66,7 +66,6 @@ def shiftVacuum(arr, n):
 
     return out
 
-
 '''
 Model class
 '''
@@ -207,8 +206,6 @@ class explicitNeuralCrest1D:
         FFace[1:-1] = fUp * uFace
 
         dFluxDx = (FFace[1:] - FFace[:-1]) / self.h
-        
-        print(dFluxDx)
 
         dfDt = self.dF * lapF - dFluxDx
 
