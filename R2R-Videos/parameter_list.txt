@@ -1,0 +1,17 @@
+'baseline_parameters' : mu_fl=150, mu_ff=50, D_f=10, kappa=1, f_0=l_0=0.95
+
+'carry_capacity_doubled' : kappa=2
+
+'carry_capacity_ten_times_greater' : kappa=10
+
+'diffusivity_halved' : D_f=5
+
+'diffusivity_doubled' : D_f=20
+
+'initial_densities_0.25' : f_0=l_0=0.25
+
+'initial_densities_0.5' : f_0=l_0=0.5
+
+'initial_densities_0.75' : f_0=l_0=0.75
+
+'mu_fl_decreased' : mu_fl=50
