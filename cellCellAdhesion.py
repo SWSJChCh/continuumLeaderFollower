@@ -7,7 +7,7 @@ from scipy.signal import fftconvolve
 Helper functions
 '''
 
-def cflDt(h, dF, safety=0.01):
+def cflDt(h, dF, safety=0.05):
     # CFL timestep restriction
     lims = []
 
@@ -90,8 +90,8 @@ class explicitNeuralCrest1D:
         xiFL, xiFF,
         L, meshPoints,
         timeSpan, timeEvaluations,
-        dt=None,
-        safety=0.01,
+        dt=1e-4,
+        safety=0.05,
         clipNonneg=True,
         boundaryMode='vacuum'
     ):
@@ -158,7 +158,7 @@ class explicitNeuralCrest1D:
         sigma = 12.0
 
         base = np.exp(-0.5 * ((x - x0) / sigma) ** 2)
-        l[:] = (base / base.max()) * f.max()
+        l[:] = (base / base.max()) * self.l0
 
         return l, f
 
@@ -267,7 +267,7 @@ if __name__ == "__main__":
 
     K = 1.0
     L = 2000.0
-    meshPoints = 20000
+    meshPoints = 10000
 
     timeSpan = (0.0, 12 * 60.0)
     timeEvaluations = np.linspace(timeSpan[0], timeSpan[1], 24)
