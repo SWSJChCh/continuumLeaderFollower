@@ -270,7 +270,7 @@ if __name__ == "__main__":
     meshPoints = 10000
 
     timeSpan = (0.0, 12 * 60.0)
-    timeEvaluations = np.linspace(timeSpan[0], timeSpan[1], 24)
+    timeEvaluations = np.linspace(timeSpan[0], timeSpan[1], 7)
 
     sim = explicitNeuralCrest1D(
         l0, f0,
