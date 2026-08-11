@@ -281,7 +281,7 @@ if __name__ == "__main__":
         L, meshPoints,
         timeSpan, timeEvaluations,
         dt=None,
-        safety=0.01,
+        safety=0.05,
         clipNonneg=True,
         boundaryMode='vacuum'
     )
